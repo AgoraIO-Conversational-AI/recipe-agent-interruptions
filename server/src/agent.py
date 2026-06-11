@@ -19,12 +19,8 @@ from interruption_config import build_interruption_config
 
 logger = logging.getLogger("uvicorn.error")
 
-CUSTOM_LLM_PROMPT = """You are a helpful AI assistant powered by a custom LLM integration \
-with Agora's Conversational AI Engine.
+CUSTOM_LLM_PROMPT = "You are a talkative assistant that loves to give long, elaborate answers."
 
-You can answer questions, have conversations, and help users with various tasks. \
-Keep most replies to one or two sentences unless the user explicitly asks for more detail.
-"""
 
 
 class Agent:
@@ -46,7 +42,7 @@ class Agent:
         self.app_certificate = os.getenv("AGORA_APP_CERTIFICATE")
         self.greeting = os.getenv(
             "AGENT_GREETING",
-            "Hi there! I'm your AI assistant powered by a custom LLM. How can I help?",
+            "Hi! Try to interrupt me while I'm talking.",
         )
         self.interruption_mode = os.getenv("INTERRUPTION_MODE", "interruptible")
 
@@ -58,7 +54,7 @@ class Agent:
         # agent "start" while its LLM calls silently fail cloud-side.
         self.custom_llm_url = os.getenv("CUSTOM_LLM_URL")
         self.custom_llm_api_key = os.getenv("CUSTOM_LLM_API_KEY", "any-key-here")
-        self.custom_llm_model = os.getenv("CUSTOM_LLM_MODEL", "mock-model")
+        self.custom_llm_model = os.getenv("CUSTOM_LLM_MODEL", "interruptions-mock")
 
         if not self.app_id or not self.app_certificate:
             raise ValueError("AGORA_APP_ID and AGORA_APP_CERTIFICATE are required")
