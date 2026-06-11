@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 from agora_agent import Area, AsyncAgora
 from agora_agent.agentkit import Agent as AgoraAgent
 from agora_agent.agentkit.vendors import CustomLLM, DeepgramSTT, MiniMaxTTS
+from interruption_config import build_interruption_config
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -47,6 +48,7 @@ class Agent:
             "AGENT_GREETING",
             "Hi there! I'm your AI assistant powered by a custom LLM. How can I help?",
         )
+        self.interruption_mode = os.getenv("INTERRUPTION_MODE", "interruptible")
 
         # Custom LLM configuration.
         # CUSTOM_LLM_URL is the FULL OpenAI-compatible chat-completions URL and must be
@@ -142,6 +144,7 @@ class Agent:
             greeting=self.greeting,
             failure_message="Please wait a moment.",
             max_history=50,
+            interruption=build_interruption_config(self.interruption_mode),
             turn_detection={
                 "config": {
                     "speech_threshold": 0.5,
