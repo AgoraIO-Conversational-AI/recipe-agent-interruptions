@@ -1,5 +1,9 @@
 # Agora Conversational AI — Interruptions Recipe (Python)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)](https://www.python.org/)
+[![Bun](https://img.shields.io/badge/bun-latest-black)](https://bun.sh/)
+
 The **interruptions** recipe in the Agora Conversational AI recipes family. Control
 whether the agent can be interrupted mid-speech: choose from fully interruptible,
 completely uninterruptable, or keyword-triggered barge-in. The `INTERRUPTION_MODE`
@@ -10,12 +14,12 @@ you can practice interrupting. STT (Deepgram) and TTS (MiniMax) stay Agora-manag
 
 ## Prerequisites
 
-- [Python 3.8+](https://www.python.org/)
+- [Python 3.10+](https://www.python.org/)
 - [Bun](https://bun.sh/)
-- [ngrok](https://ngrok.com/) (or any tunnel to expose localhost)
-- Agora App ID + App Certificate (the [Agora CLI](https://github.com/AgoraIO/cli) makes this easy)
+- [Agora CLI](https://github.com/AgoraIO/cli)
+- [ngrok](https://ngrok.com/) (or any tunnel — the mock LLM must be publicly reachable; Agora cloud calls it directly)
 
-## Run it
+## Run It
 
 ```bash
 # 1. Install + create both Python venvs
@@ -43,41 +47,33 @@ bun run dev
 Open [http://localhost:3000](http://localhost:3000) → **Start Conversation** → speak
 while the agent is talking to test barge-in.
 
-## Architecture
+### Working from a clone
 
-```
-Browser (localhost:3000)
-  │  fetch /api/*
-  ▼
-Next.js  ──rewrite──▶  Agent backend  (server/, localhost:8000)
-                          │  starts agent session (CustomLLM vendor + interruption config)
-                          ▼
-                       Agora ConvoAI Cloud
-                          │  POST <CUSTOM_LLM_URL>   (Authorization: Bearer)
-                          ▼
-                       Mock LLM endpoint  (llm/, localhost:8001)
-                          ▲  public via ngrok tunnel
-```
+After cloning, run `bun run setup` to create the Python venvs, then follow the steps
+above to add credentials and a tunnel URL.
 
-The browser only ever calls Next `/api/*`, which rewrites to the agent backend.
-The agent backend owns Agora tokens and agent lifecycle. The **mock LLM endpoint**
-is separate because Agora cloud — not the browser — calls it, so it must be publicly
-reachable. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+**Services:**
 
-## Project structure
+| Service | URL |
+| --- | --- |
+| Frontend | http://localhost:3000 |
+| Backend | http://localhost:8000 |
+| API docs | http://localhost:8000/docs |
 
-```
-recipe-agent-interruptions/
-├── server/   # Agent backend (:8000) — tokens + agent lifecycle, interruption config
-│   ├── src/{server.py, agent.py, interruption_config.py}
-│   └── tests/test_interruption_config.py
-├── llm/      # Mock LLM endpoint (:8001) — OpenAI-compatible long-monologue mock, no agora deps
-│   └── src/custom_llm_server.py
-├── web/      # Next.js frontend (:3000)
-└── package.json
-```
+## Deploy
 
-## Environment variables
+Deploy `web` (Next.js) and `server` (FastAPI) to your hosting provider. Set
+`AGENT_BACKEND_URL` in the web deployment to point at the deployed backend.
+
+A pre-built Docker image is published to
+`ghcr.io/AgoraIO-Conversational-AI/recipe-agent-interruptions` on `v*` tags.
+The image is **multi-process**: it runs the agent backend on :8000 and the mock LLM
+endpoint on :8001 inside a single container. To host the single-image demo, expose
+:8001 publicly and point `CUSTOM_LLM_URL` at it. A local `docker run` still needs a
+tunnel (Agora cloud cannot reach localhost). The mock is a dev stand-in — replace it
+with your own model in production.
+
+## Environment Variables
 
 Backend env file: [`server/.env.example`](server/.env.example).
 
@@ -118,7 +114,49 @@ bun run verify:local     # full local gate: backend compile + smoke tests + web 
 bun run clean            # remove venvs and build artifacts
 ```
 
-## Replacing the mock
+Tests run standalone (no Agora cloud needed): `pytest` in `server/`, plus
+`bun run verify` in `web/`. CI runs them on Linux/macOS/Windows × Python 3.10 & 3.13.
+
+## Architecture
+
+```
+Browser (localhost:3000)
+  │  fetch /api/*
+  ▼
+Next.js  ──rewrite──▶  Agent backend  (server/, localhost:8000)
+                          │  starts agent session (CustomLLM vendor + interruption config)
+                          ▼
+                       Agora ConvoAI Cloud
+                          │  POST <CUSTOM_LLM_URL>   (Authorization: Bearer)
+                          ▼
+                       Mock LLM endpoint  (llm/, localhost:8001)
+                          ▲  public via ngrok tunnel
+```
+
+The browser only ever calls Next `/api/*`, which rewrites to the agent backend.
+The agent backend owns Agora tokens and agent lifecycle. The **mock LLM endpoint**
+is separate because Agora cloud — not the browser — calls it, so it must be publicly
+reachable. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+## What You Get
+
+- Next.js web client (React 19 / TypeScript) for RTC/RTM and agent lifecycle
+- FastAPI agent backend with token generation and agent session management
+- The `/api/get_config`, `/api/startAgent`, and `/api/stopAgent` contract, rewritten by Next to the backend
+- `INTERRUPTION_MODE` → Agora interruption config: `interruptible` (default), `uninterruptable`, or `keywords` (trigger words: "stop", "wait", "hold on")
+- The mock LLM endpoint returns a long monologue so you have time to practice interrupting
+- Zero-key mock: no external API key needed to run the demo
+
+## How It Works
+
+1. Browser loads; Next.js fetches `/api/get_config` → backend generates a Token007 RTC token and returns channel/UID config.
+2. User clicks **Start Conversation**; Next.js posts `/api/startAgent` → backend calls Agora ConvoAI to start an agent session using `CustomLLM` (pointing at `CUSTOM_LLM_URL`) and applies the `interruption` config from `INTERRUPTION_MODE`.
+3. Agora ConvoAI Cloud joins the RTC channel, receives audio, and runs STT (Deepgram nova-3).
+4. For each LLM turn, Agora POSTs the conversation to `CUSTOM_LLM_URL/chat/completions`; the mock endpoint streams back a long monologue as an OpenAI SSE response.
+5. Agora runs TTS (MiniMax speech_2_6_turbo) and sends audio back to the browser. The `interruption` config governs whether the user's speech interrupts the agent mid-sentence.
+6. User clicks **Stop**; Next.js posts `/api/stopAgent` → backend ends the agent session.
+
+### Replacing the mock
 
 The mock LLM always returns a long monologue so you can test interruption behavior.
 To use a real model, replace the body of `get_long_reply()` in
@@ -126,6 +164,16 @@ To use a real model, replace the body of `get_long_reply()` in
 The endpoint must keep speaking the OpenAI streaming `/chat/completions` contract
 (see [`llm/README.md`](llm/README.md)). A production endpoint should also validate
 the `Authorization: Bearer` header.
+
+## Repo Map
+
+| Path | Description |
+| --- | --- |
+| `web/` | Next.js frontend (:3000) |
+| `server/` | FastAPI agent backend (:8000) — tokens, agent lifecycle, interruption config |
+| `llm/` | OpenAI-compatible mock `/chat/completions` at :8001; Agora cloud calls this directly |
+| `ARCHITECTURE.md` | Detailed request flow, interruption config table, API reference |
+| `AGENTS.md` | Guide for coding agents working in this repo |
 
 ## Troubleshooting
 
@@ -137,6 +185,11 @@ the `Authorization: Bearer` header.
 | `Missing llm/venv` during verify | Run `bun run setup` (creates both venvs). |
 | Interruption mode has no effect | Confirm `INTERRUPTION_MODE` is set in `server/.env.local` (not `llm/.env.local`). |
 
+## More Docs
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [AGENTS.md](./AGENTS.md)
+
 ## License
 
-MIT
+Released under the [MIT License](./LICENSE).
