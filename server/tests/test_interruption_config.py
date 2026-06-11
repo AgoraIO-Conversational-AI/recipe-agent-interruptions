@@ -23,3 +23,12 @@ def test_keywords():
     assert cfg["enable"] is True
     assert cfg["mode"] == "keywords"
     assert "stop" in cfg["keywords_config"]["keywords"]
+
+
+def test_unknown_mode_defaults_to_interruptible():
+    assert ic.build_interruption_config("bogus") == {"enable": True}
+
+
+def test_mode_is_case_insensitive():
+    assert ic.build_interruption_config("KEYWORDS")["mode"] == "keywords"
+    assert ic.build_interruption_config("Uninterruptable")["enable"] is False

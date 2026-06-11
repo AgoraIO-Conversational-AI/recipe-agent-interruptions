@@ -1,11 +1,13 @@
 """
-Agent — Custom LLM Recipe
+Agent — Interruption Control Recipe
 
-High-level API for managing Agora Conversational AI Agents with a Custom LLM.
+High-level API for managing Agora Conversational AI Agents that demonstrate
+interruption control.
 
-Instead of using the built-in OpenAI vendor, this recipe configures the agent
-to use a custom LLM endpoint (your own proxy server) that is compatible with
-the OpenAI Chat Completions API format.
+``INTERRUPTION_MODE`` (interruptible / uninterruptable / keywords) is mapped
+by ``interruption_config.build_interruption_config`` to the Agora ``interruption``
+config dict.  The mock ``llm/`` server returns a long monologue so users can
+exercise all three interruption behaviours without real LLM credentials.
 """
 import logging
 import os
@@ -25,16 +27,13 @@ CUSTOM_LLM_PROMPT = "You are a talkative assistant that loves to give long, elab
 
 class Agent:
     """
-    High-level wrapper for Agora Conversational AI Agent with Custom LLM.
+    High-level wrapper for an Agora Conversational AI Agent that demonstrates
+    interruption control.
 
-    The key difference from the quickstart is that this uses the OpenAI vendor
-    with a custom `base_url` pointing to your own OpenAI-compatible endpoint
-    (the custom_llm_server.py proxy). The Agora cloud will call your proxy
-    for chat completions instead of calling OpenAI directly.
-
-    IMPORTANT: The custom LLM URL must be publicly accessible for the Agora
-    Conversational AI Engine (cloud) to reach it. For local development, use
-    a tunnel (ngrok, Cloudflare Tunnel) or GitHub Codespaces with public ports.
+    Reads ``INTERRUPTION_MODE`` from the environment and delegates mode mapping
+    to ``interruption_config.build_interruption_config``.  The ``CustomLLM``
+    vendor points the agent at the mock ``llm/`` endpoint, which always returns
+    a long monologue — giving the user something to interrupt.
     """
 
     def __init__(self):
@@ -159,7 +158,7 @@ class Agent:
                     },
                 },
             },
-            advanced_features={"enable_rtm": True, "enable_tools": True},
+            advanced_features={"enable_rtm": True},
             parameters=parameters,
         )
 
