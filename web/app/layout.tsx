@@ -15,9 +15,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-	title: "Custom LLM Recipe | Agora Conversational AI",
+	title: "Interruptions Recipe | Agora Conversational AI",
 	description:
-		"Recipe: Bring your own LLM to Agora Conversational AI Engine via a custom OpenAI-compatible proxy.",
+		"Recipe: control whether the agent can be interrupted — interruptible, uninterruptable, or keyword-triggered barge-in.",
 	icons: {
 		icon: [
 			{ url: "/favicon.ico" },
