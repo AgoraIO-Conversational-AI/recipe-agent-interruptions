@@ -1,8 +1,8 @@
 """
-Custom LLM Server — Mock Implementation
+Interruptions Mock LLM Server
 
-This server demonstrates how to implement an OpenAI-compatible Chat Completions
-endpoint that works with Agora Conversational AI Engine.
+OpenAI-compatible Chat Completions endpoint for the interruptions recipe.
+Always returns a long monologue so the user can practice interrupting the agent.
 
 Key points:
 - Must implement POST /chat/completions
@@ -10,14 +10,7 @@ Key points:
 - Must follow OpenAI Chat Completions response format
 - Agora cloud sends Authorization header with the api_key you configured
 
-This mock version returns pre-defined responses so you can test the full
-voice pipeline (STT → Custom LLM → TTS) without any external LLM dependency.
-
-Replace the mock logic with your own:
-- Call your own model (local or remote)
-- Add RAG context injection
-- Implement tool calling
-- Route to different models based on content
+Replace the mock logic with your own model by editing get_long_reply().
 """
 import asyncio
 import json
@@ -46,10 +39,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Custom LLM Server (Mock)",
+    title="Interruptions Mock LLM Server",
     description=(
         "OpenAI-compatible Chat Completions endpoint for Agora Conversational AI Engine. "
-        "This mock implementation demonstrates the required interface contract."
+        "Returns a long monologue so you can test agent interruption behavior."
     ),
     version="1.0.0",
 )
@@ -109,56 +102,29 @@ class ChatCompletionRequest(BaseModel):
 # =============================================================================
 # Mock Response Logic
 # =============================================================================
-# Replace this section with your actual LLM logic:
+# Replace get_long_reply() with your actual LLM logic:
 # - Call a local model (Ollama, vLLM, etc.)
 # - Call a remote API
 # - Implement RAG retrieval + generation
 # - Add business logic, filtering, routing
 # =============================================================================
 
-MOCK_RESPONSES = [
-    "I'm a custom LLM running on your own server! This response is coming through Agora's Conversational AI pipeline, from your custom endpoint, through TTS, and into your ears as speech.",
-    "This is a mock response demonstrating the custom LLM integration. In production, you'd replace this with calls to your own model or any LLM provider.",
-    "Hello! I'm responding from your custom LLM server. The full pipeline is working: your speech was transcribed by STT, sent to me, and my response will be converted to speech by TTS.",
-    "Great question! I'm a mock LLM server that demonstrates how to build a custom endpoint compatible with Agora's Conversational AI Engine. You can replace me with any logic you want.",
-]
+# A deliberately long monologue so the user can practice interrupting the agent.
+MONOLOGUE = (
+    "Sure, let me tell you a long and winding story so you have plenty of time to "
+    "interrupt me. Once upon a time, in a faraway data center, a little voice agent "
+    "loved to talk and talk and talk. It would describe the weather, the clouds, the "
+    "passing servers, and every blinking light it could see. It never seemed to run "
+    "out of things to say, going on about latency and packets and the gentle hum of "
+    "the cooling fans, until eventually, much later, it reached the end of its rather "
+    "long and boring tale."
+)
 
-_response_counter = 0
 
-
-def get_mock_response(messages: list) -> str:
-    """
-    Generate a mock response based on the conversation.
-
-    In a real implementation, this is where you'd:
-    - Extract the user's latest message
-    - Query your knowledge base / vector DB
-    - Call your own model
-    - Apply business logic
-    """
-    global _response_counter
-
-    # Extract the last user message for logging
-    last_user_msg = ""
-    for msg in reversed(messages):
-        if hasattr(msg, "role") and msg.role == "user":
-            content = msg.content
-            if isinstance(content, str):
-                last_user_msg = content
-            elif isinstance(content, list) and len(content) > 0:
-                first = content[0]
-                if isinstance(first, dict):
-                    last_user_msg = first.get("text", "")
-                elif hasattr(first, "text"):
-                    last_user_msg = first.text
-            break
-
-    logger.info(f"User said: {last_user_msg}")
-
-    # Cycle through mock responses
-    response = MOCK_RESPONSES[_response_counter % len(MOCK_RESPONSES)]
-    _response_counter += 1
-    return response
+def get_long_reply(messages: list) -> str:
+    """Always return the long monologue (mock). The point of this recipe is the
+    interruption behavior, configured on the agent, not the LLM content."""
+    return MONOLOGUE
 
 
 # =============================================================================
@@ -233,7 +199,7 @@ async def chat_completions(
         )
 
     # Generate mock response
-    response_text = get_mock_response(request.messages)
+    response_text = get_long_reply(request.messages)
     chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     model = request.model or "mock-model"
 
@@ -259,12 +225,12 @@ async def chat_completions(
 @app.get("/health")
 async def health():
     """Health check."""
-    return {"status": "ok", "service": "custom-llm-mock"}
+    return {"status": "ok", "service": "interruptions-mock-llm"}
 
 
 if __name__ == "__main__":
     port = int(os.getenv("CUSTOM_LLM_PORT", "8001"))
-    logger.info(f"Starting Custom LLM Server (Mock) on port {port}")
-    logger.info("This server returns mock responses — no LLM API key needed.")
+    logger.info(f"Starting Interruptions Mock LLM Server on port {port}")
+    logger.info("This server returns a long monologue — no LLM API key needed.")
     logger.info(f"Endpoint: http://0.0.0.0:{port}/chat/completions")
     uvicorn.run(app, host="0.0.0.0", port=port)
