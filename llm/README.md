@@ -1,8 +1,8 @@
-# Custom LLM Endpoint — Mock
+# Interruptions Mock LLM Endpoint
 
 An OpenAI-compatible `POST /chat/completions` server (port 8001) that Agora cloud
-calls during a conversation. This mock returns canned streaming responses so you
-can exercise the full STT → custom LLM → TTS pipeline with **no LLM API key**.
+calls during a conversation. This mock always returns a **long monologue** so you
+can practice interrupting the agent, regardless of what you say.
 
 It has no `agora-agents` dependency — it is a plain FastAPI app, which is exactly
 the boundary you replace with your own model.
@@ -46,6 +46,7 @@ This mock does **not** authenticate. A production endpoint should validate the
 
 ## Replace the mock
 
-Edit `get_mock_response()` in `src/custom_llm_server.py`. Examples: call a local
-model (Ollama/vLLM), inject RAG context before generating, or route models by
-content.
+Replace the body of `get_long_reply()` in `src/custom_llm_server.py` with your own
+logic. Examples: call a local model (Ollama/vLLM), inject RAG context before
+generating, or route models by content. The interruption behavior is configured on
+the agent (via `INTERRUPTION_MODE` in `server/.env.local`), not here.

@@ -1,20 +1,23 @@
 # Agent Development Guide
 
-For coding agents working in `agent-recipes-python`. This repository is the
-**custom-llm** recipe (`Recipe Role: custom-llm`) in the Agora Conversational AI
+For coding agents working in `recipe-agent-interruptions`. This repository is the
+**interruptions** recipe (`Recipe Role: interruptions`) in the Agora Conversational AI
 recipes family, derived from the base `agent-quickstart-python` template.
 
 ## System shape
 
 - **`server/`** — Python FastAPI agent backend (:8000). Owns Agora token
   generation and agent session lifecycle. Uses the `CustomLLM` vendor to point the
-  agent's LLM stage at the custom LLM endpoint. SDK: `agora-agents>=2.0.0`
-  (`import agora_agent`).
-- **`llm/`** — Python FastAPI custom LLM endpoint (:8001). OpenAI-compatible
-  `POST /chat/completions` mock that Agora cloud calls. No `agora-agents`
-  dependency. This is the component a developer replaces.
-- **`web/`** — Next.js 16 / React 19 / TypeScript frontend (:3000), resynced from
-  the base quickstart with custom-LLM branding only.
+  agent's LLM stage at the mock LLM endpoint, and applies `interruption` config
+  from `INTERRUPTION_MODE`. SDK: `agora-agents>=2.0.0` (`import agora_agent`).
+  STT: `DeepgramSTT(model="nova-3", language="en")`.
+  TTS: `MiniMaxTTS(model="speech_2_6_turbo", voice_id="English_captivating_female1")`.
+- **`llm/`** — Python FastAPI mock LLM endpoint (:8001). OpenAI-compatible
+  `POST /chat/completions` that always returns a long monologue so barge-in is
+  testable. No `agora-agents` dependency. This is the component a developer replaces.
+- **`web/`** — Next.js 16 / React 19 / TypeScript frontend (:3000).
+- **`server/src/interruption_config.py`** — maps `INTERRUPTION_MODE` to the Agora
+  `interruption` dict. Kept import-free from `agora_agent` for unit testability.
 - Auth: Token007 from `AGORA_APP_ID` + `AGORA_APP_CERTIFICATE`.
 
 ## Routing / ownership
@@ -24,12 +27,13 @@ recipes family, derived from the base `agent-quickstart-python` template.
   agent backend; do not add `web/app/api/**/route.ts` for agent/token logic.
 - Token generation and agent lifecycle live in `server/src/`.
 - The OpenAI `/chat/completions` contract lives in `llm/src/`.
+- Interruption mode mapping lives in `server/src/interruption_config.py`.
 
 ## Supported modes
 
 - **Local:** `bun run dev` starts `llm` (:8001), `server` (:8000), and `web`
   (:3000). The web app calls `/api/*`; Next rewrites to
-  `AGENT_BACKEND_URL=http://localhost:8000`. The custom LLM endpoint must be
+  `AGENT_BACKEND_URL=http://localhost:8000`. The mock LLM endpoint must be
   exposed publicly (ngrok) so Agora cloud can reach it.
 - **Deploy:** deploy `web` (Next) + `server` (reachable FastAPI) + `llm` (publicly
   reachable FastAPI). Set `AGENT_BACKEND_URL` in the web deployment.
@@ -42,6 +46,8 @@ recipes family, derived from the base `agent-quickstart-python` template.
 - `CUSTOM_LLM_URL` is required and must be public; there is no localhost default.
 - Both `CUSTOM_LLM_URL` and `CUSTOM_LLM_API_KEY` are required by the `CustomLLM`
   vendor (the SDK rejects one without the other).
+- `INTERRUPTION_MODE` is optional; it defaults to `interruptible`.
+- `interruption_config.py` must remain free of `agora_agent` imports.
 
 ## Anti-patterns
 
@@ -51,6 +57,7 @@ recipes family, derived from the base `agent-quickstart-python` template.
 - Do not put `PORT` in `server/.env.example` (it would clobber the random port
   that `verify:local:fastapi` injects via `load_dotenv(override=True)`).
 - Do not link to `docs/ai/` — that progressive-disclosure tree is not present yet.
+- Do not import `agora_agent` in `interruption_config.py`.
 
 ## Commands
 
@@ -82,4 +89,4 @@ Narrower checks: `bun run verify:backend`, `bun run verify:local:fastapi`,
   tense.
 - No AI tool names in commit messages or PR descriptions. No `Co-Authored-By`
   trailers. No `--no-verify`. No git config changes.
-- Branch names: `type/short-description` (e.g. `feat/custom-llm-tools`).
+- Branch names: `type/short-description` (e.g. `feat/interruption-keywords`).
