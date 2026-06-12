@@ -1,9 +1,9 @@
 # Architecture — Interruptions Recipe
 
-Three processes. The browser talks only to Next.js `/api/*`, which rewrites to the
-agent backend. The agent backend owns Agora tokens and agent lifecycle, and applies
-the `INTERRUPTION_MODE` config when it starts the agent. The mock LLM endpoint is a
-separate service that **Agora cloud** calls directly.
+Two processes. The browser talks only to Next.js `/api/*`, which rewrites to the
+agent backend. The agent backend owns Agora tokens and agent lifecycle, applies the
+`INTERRUPTION_MODE` config when it starts the agent, and also serves the mock LLM
+endpoint mounted at `/llm`, which **Agora cloud** calls directly.
 
 ## Request flow
 
@@ -22,7 +22,7 @@ Agora ConvoAI Cloud
   │  user speech → Deepgram STT (managed, nova-3)
   │  POST <CUSTOM_LLM_URL>/chat/completions   (Authorization: Bearer <key>)
   ▼
-Mock LLM endpoint (llm/, :8001, public via tunnel)
+Mock LLM endpoint (mounted at /llm in server/, :8000, public via tunnel)
   │  returns long-monologue OpenAI SSE stream
   ▼
 Agora ConvoAI Cloud → MiniMax TTS (managed, speech_2_6_turbo) → user hears speech
@@ -30,6 +30,23 @@ Agora ConvoAI Cloud → MiniMax TTS (managed, speech_2_6_turbo) → user hears s
 ```
 
 `POST /api/stopAgent { agentId }` ends the session.
+
+## One process, two concerns
+
+`server/` runs a single process that serves both the token/agent endpoints and,
+mounted at `/llm`, the OpenAI-compatible mock LLM endpoint (`server/src/llm.py`).
+
+The two concerns are kept in separate files with a one-directional dependency
+(`server.py` imports `llm`, never the reverse), and `llm.py` has no `agora_agent`
+import — it is the provider-agnostic part you replace with your own model.
+
+Merging them onto one public surface is a deliberate trade. The Agora App
+Certificate is only ever used in-memory to mint tokens — it never crosses a wire —
+so co-locating the public `/llm` route with the token endpoints does not expose
+the certificate. It does, however, make the token-minting endpoints
+(`/get_config`, `/startAgent`, `/stopAgent`) publicly reachable. They are
+unauthenticated in this recipe; put auth / rate-limiting in front of them
+(ingress, gateway, or a proxy) before any real deployment.
 
 ## Interruption config
 
@@ -43,19 +60,6 @@ unit-testable in isolation. Tests live in `server/tests/test_interruption_config
 | `uninterruptable` | `{"enable": false, "disabled_config": {"strategy": "append"}}` |
 | `keywords` | `{"enable": true, "mode": "keywords", "keywords_config": {"keywords": [...]}}` |
 
-## Why two backends
-
-`server/` and `llm/` are split because of an **exposure asymmetry**:
-
-- `llm/` must be reachable by **Agora cloud over the public internet** (hence the
-  ngrok tunnel). It is the part you replace with your own model, and it has no
-  Agora dependency.
-- `server/` only needs to be reachable by your web tier. It holds the Agora App
-  Certificate and all token logic.
-
-In production the two could be co-deployed, but they are kept separate here to
-make that boundary — and the public-exposure requirement — explicit.
-
 ## API (agent backend, port 8000)
 
 | Endpoint | Method | Description |
@@ -63,8 +67,11 @@ make that boundary — and the public-exposure requirement — explicit.
 | `/get_config` | GET | Token + channel/UID config |
 | `/startAgent` | POST | Start the agent session with interruption config |
 | `/stopAgent` | POST | Stop the agent by `agent_id` |
+| `/llm/chat/completions` | POST | OpenAI-compatible completions (monologue mock) |
+| `/llm/health` | GET | LLM endpoint health check |
 
-The browser calls these as `/api/*`; Next rewrites them to `AGENT_BACKEND_URL`.
+The browser calls the first three as `/api/*`; Next rewrites them to
+`AGENT_BACKEND_URL`. Agora cloud calls `/llm/chat/completions` directly.
 
 ## Auth
 

@@ -229,7 +229,7 @@ async def health():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("CUSTOM_LLM_PORT", "8001"))
+    port = int(os.getenv("PORT", "8000"))
     logger.info(f"Starting Interruptions Mock LLM Server on port {port}")
     logger.info("This server returns a long monologue — no LLM API key needed.")
     logger.info(f"Endpoint: http://0.0.0.0:{port}/chat/completions")

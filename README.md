@@ -9,20 +9,21 @@ whether the agent can be interrupted mid-speech: choose from fully interruptible
 completely uninterruptable, or keyword-triggered barge-in. The `INTERRUPTION_MODE`
 env var sets the Agora `interruption` config at agent-start time.
 
-This repo ships a **zero-key mock** LLM endpoint that returns a long monologue so
-you can practice interrupting. STT (Deepgram) and TTS (MiniMax) stay Agora-managed.
+This repo ships a **zero-key mock** LLM endpoint mounted at `/llm` in the same
+backend process so you can run the full pipeline immediately, then replace the mock
+with your own model. STT (Deepgram) and TTS (MiniMax) stay Agora-managed.
 
 ## Prerequisites
 
 - [Python 3.10+](https://www.python.org/)
 - [Bun](https://bun.sh/)
 - [Agora CLI](https://github.com/AgoraIO/cli)
-- [ngrok](https://ngrok.com/) (or any tunnel — the mock LLM must be publicly reachable; Agora cloud calls it directly)
+- [ngrok](https://ngrok.com/) (or any tunnel — the backend must be publicly reachable; Agora cloud calls `/llm` directly)
 
 ## Run It
 
 ```bash
-# 1. Install + create both Python venvs
+# 1. Install + create the server Python venv
 bun run setup
 
 # 2. Add Agora credentials (CLI), or edit server/.env.local by hand
@@ -30,17 +31,17 @@ agora login
 agora project use <your-project>          # select which project to use (you may have several)
 agora project env write server/.env.local # writes App ID/Certificate; keeps your CUSTOM_LLM_* lines
 
-# 3. Expose the mock LLM endpoint publicly (Agora cloud calls it directly)
-ngrok http 8001
+# 3. Expose the backend publicly (Agora cloud calls /llm/chat/completions)
+ngrok http 8000
 
 # 4. Add the tunnel URL to server/.env.local (use whatever domain ngrok prints —
 #    today that is usually *.ngrok-free.dev)
-#    CUSTOM_LLM_URL=https://<your-tunnel>.ngrok-free.dev/chat/completions
+#    CUSTOM_LLM_URL=https://<your-tunnel>.ngrok-free.dev/llm/chat/completions
 
 # 5. (Optional) Set the interruption mode
 #    echo 'INTERRUPTION_MODE=keywords' >> server/.env.local
 
-# 6. Run all three services
+# 6. Run the backend and web
 bun run dev
 ```
 
@@ -49,7 +50,7 @@ while the agent is talking to test barge-in.
 
 ### Working from a clone
 
-After cloning, run `bun run setup` to create the Python venvs, then follow the steps
+After cloning, run `bun run setup` to create the Python venv, then follow the steps
 above to add credentials and a tunnel URL.
 
 **Services:**
@@ -57,21 +58,26 @@ above to add credentials and a tunnel URL.
 | Service | URL |
 | --- | --- |
 | Frontend | http://localhost:3000 |
-| Backend | http://localhost:8000 |
+| Backend | http://localhost:8000 (also serves `/llm`) |
 | API docs | http://localhost:8000/docs |
 
 ## Deploy
 
-Deploy `web` (Next.js) and `server` (FastAPI) to your hosting provider. Set
-`AGENT_BACKEND_URL` in the web deployment to point at the deployed backend.
+Deploy `web` (Next.js) and `server` (a single publicly reachable FastAPI
+backend). The mock LLM endpoint is mounted at `/llm` in the same process, so
+Agora cloud reaches it at `<public-url>/llm/chat/completions`. Set
+`AGENT_BACKEND_URL` in the web deployment so the Next rewrites reach the
+backend.
 
-A pre-built Docker image is published to
+A single-process Docker image is published to
 `ghcr.io/AgoraIO-Conversational-AI/recipe-agent-interruptions` on `v*` tags.
-The image is **multi-process**: it runs the agent backend on :8000 and the mock LLM
-endpoint on :8001 inside a single container. To host the single-image demo, expose
-:8001 publicly and point `CUSTOM_LLM_URL` at it. A local `docker run` still needs a
-tunnel (Agora cloud cannot reach localhost). The mock is a dev stand-in — replace it
-with your own model in production.
+It bundles the agent backend and the mock LLM endpoint in one process on
+port 8000. Point `CUSTOM_LLM_URL` at `<public-url>/llm/chat/completions`.
+
+> **Co-public caveat:** the server :8000 is now the public endpoint Agora calls
+> (`/llm`), so the token endpoints are co-public; the App Certificate is only
+> used in-memory to mint tokens (never on the wire); add auth/rate-limiting
+> before a real deployment.
 
 ## Environment Variables
 
@@ -81,13 +87,12 @@ Backend env file: [`server/.env.example`](server/.env.example).
 | --- | :---: | :---: | --- |
 | `AGORA_APP_ID` | ✅ | — | Agora Console → Project → App ID |
 | `AGORA_APP_CERTIFICATE` | ✅ | — | Agora Console → Project → App Certificate (server only) |
-| `CUSTOM_LLM_URL` | ✅ | — | **Public** chat-completions URL of your `llm/` endpoint. Agora cloud calls it; cannot be `localhost`. |
+| `CUSTOM_LLM_URL` | ✅ | — | **Public** chat-completions URL of your mounted `/llm` endpoint (`<tunnel>/llm/chat/completions`). Agora cloud calls it; cannot be `localhost`. |
 | `CUSTOM_LLM_API_KEY` | ✅ | `any-key-here` | Forwarded by Agora cloud as `Authorization: Bearer`. Required by the `CustomLLM` vendor. |
 | `CUSTOM_LLM_MODEL` |  | `interruptions-mock` | Model name passed to your endpoint |
 | `INTERRUPTION_MODE` |  | `interruptible` | `interruptible` \| `uninterruptable` \| `keywords`. Lives in `server/.env.local`. |
 | `AGENT_GREETING` |  | built-in | Optional opening line override |
 | `PORT` |  | `8000` | Agent backend port |
-| `CUSTOM_LLM_PORT` |  | `8001` | Port for the mock LLM endpoint — lives in **`llm/.env.local`**, not `server/`'s |
 | `AGENT_BACKEND_URL` (web deploy) | ✅ | — | Required in a deployed `web` app when proxying to the backend |
 
 ### INTERRUPTION_MODE values
@@ -103,8 +108,8 @@ The mode mapping lives in `server/src/interruption_config.py`.
 ## Commands
 
 ```bash
-bun run setup            # install web deps + create server/ and llm/ venvs
-bun run dev              # run llm (:8001) + backend (:8000) + web (:3000)
+bun run setup            # install web deps + create server/ venv
+bun run dev              # run backend (:8000, serves /llm) + web (:3000)
 
 bun run doctor           # prerequisite check (no creds needed)
 bun run doctor:local     # + .env.local + credentials + CUSTOM_LLM_URL checks
@@ -129,14 +134,15 @@ Next.js  ──rewrite──▶  Agent backend  (server/, localhost:8000)
                        Agora ConvoAI Cloud
                           │  POST <CUSTOM_LLM_URL>   (Authorization: Bearer)
                           ▼
-                       Mock LLM endpoint  (llm/, localhost:8001)
+                       Mock LLM endpoint  (mounted at /llm in server/, localhost:8000)
                           ▲  public via ngrok tunnel
 ```
 
 The browser only ever calls Next `/api/*`, which rewrites to the agent backend.
 The agent backend owns Agora tokens and agent lifecycle. The **mock LLM endpoint**
-is separate because Agora cloud — not the browser — calls it, so it must be publicly
-reachable. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+is mounted at `/llm` in the same backend; because Agora cloud — not the browser —
+calls it, the backend must be publicly reachable (`ngrok http 8000`).
+See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## What You Get
 
@@ -160,18 +166,17 @@ reachable. See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 The mock LLM always returns a long monologue so you can test interruption behavior.
 To use a real model, replace the body of `get_long_reply()` in
-[`llm/src/custom_llm_server.py`](llm/src/custom_llm_server.py) with your own logic.
-The endpoint must keep speaking the OpenAI streaming `/chat/completions` contract
-(see [`llm/README.md`](llm/README.md)). A production endpoint should also validate
-the `Authorization: Bearer` header.
+[`server/src/llm.py`](server/src/llm.py) with your own logic.
+The endpoint must keep speaking the OpenAI streaming `/chat/completions` contract.
+A production endpoint should also validate the `Authorization: Bearer` header.
 
 ## Repo Map
 
 | Path | Description |
 | --- | --- |
 | `web/` | Next.js frontend (:3000) |
-| `server/` | FastAPI agent backend (:8000) — tokens, agent lifecycle, interruption config |
-| `llm/` | OpenAI-compatible mock `/chat/completions` at :8001; Agora cloud calls this directly |
+| `server/` | FastAPI agent backend (:8000) — tokens, agent lifecycle, interruption config, and the `/llm` endpoint at the same port |
+| `server/src/llm.py` | OpenAI-compatible mock `/chat/completions` handler; no Agora deps |
 | `ARCHITECTURE.md` | Detailed request flow, interruption config table, API reference |
 | `AGENTS.md` | Guide for coding agents working in this repo |
 
@@ -179,11 +184,11 @@ the `Authorization: Bearer` header.
 
 | Problem | Fix |
 | --- | --- |
-| Agent starts but never speaks | `CUSTOM_LLM_URL` is not public or omits `/chat/completions`. Use your ngrok URL. |
+| Agent starts but never speaks | `CUSTOM_LLM_URL` is not public or omits `/llm/chat/completions`. Use your ngrok URL. |
 | `doctor:local` warns about localhost | Replace the local URL with your public tunnel URL. |
 | Local calls fail / hang under a global proxy (Clash, etc.) | Your proxy is routing loopback through itself. Configure it to send `127.0.0.1`, `localhost`, and RFC-1918 ranges DIRECT. |
-| `Missing llm/venv` during verify | Run `bun run setup` (creates both venvs). |
-| Interruption mode has no effect | Confirm `INTERRUPTION_MODE` is set in `server/.env.local` (not `llm/.env.local`). |
+| `Missing server/venv` during verify | Run `bun run setup`. |
+| Interruption mode has no effect | Confirm `INTERRUPTION_MODE` is set in `server/.env.local`. |
 
 ## More Docs
 

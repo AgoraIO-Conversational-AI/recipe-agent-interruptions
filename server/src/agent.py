@@ -6,7 +6,7 @@ interruption control.
 
 ``INTERRUPTION_MODE`` (interruptible / uninterruptable / keywords) is mapped
 by ``interruption_config.build_interruption_config`` to the Agora ``interruption``
-config dict.  The mock ``llm/`` server returns a long monologue so users can
+config dict.  The mock LLM endpoint (``server/src/llm.py``) returns a long monologue so users can
 exercise all three interruption behaviours without real LLM credentials.
 """
 import logging
@@ -32,7 +32,7 @@ class Agent:
 
     Reads ``INTERRUPTION_MODE`` from the environment and delegates mode mapping
     to ``interruption_config.build_interruption_config``.  The ``CustomLLM``
-    vendor points the agent at the mock ``llm/`` endpoint, which always returns
+    vendor points the agent at the mock LLM endpoint, which always returns
     a long monologue — giving the user something to interrupt.
     """
 
@@ -48,7 +48,8 @@ class Agent:
         # Custom LLM configuration.
         # CUSTOM_LLM_URL is the FULL OpenAI-compatible chat-completions URL and must be
         # PUBLICLY reachable: Agora cloud (not this backend) calls it. For local dev,
-        # expose the llm/ server on port 8001 via ngrok and paste that URL here.
+        # expose the backend on port 8000 via ngrok and set CUSTOM_LLM_URL to
+        # <tunnel>/llm/chat/completions (the mock endpoint is mounted in-process).
         # There is intentionally no localhost default: a localhost URL would let the
         # agent "start" while its LLM calls silently fail cloud-side.
         self.custom_llm_url = os.getenv("CUSTOM_LLM_URL")
