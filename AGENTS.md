@@ -9,7 +9,7 @@ recipes family, derived from the base `agent-quickstart-python` template.
 - **`server/`** — Python FastAPI agent backend (:8000). Owns Agora token
   generation and agent session lifecycle. Uses the `CustomLLM` vendor to point the
   agent's LLM stage at the mock LLM endpoint, and applies `interruption` config
-  from `INTERRUPTION_MODE`. SDK: `agora-agents>=2.0.0` (`import agora_agent`).
+  from `INTERRUPTION_MODE`. SDK: `agora-agents>=2.3.0` (`import agora_agent`).
   STT: `DeepgramSTT(model="nova-3", language="en")`.
   TTS: `MiniMaxTTS(model="speech_2_6_turbo", voice_id="English_captivating_female1")`.
 - **`server/src/llm.py`** — provider-agnostic FastAPI mock LLM endpoint, mounted
