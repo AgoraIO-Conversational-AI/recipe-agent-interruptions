@@ -20,6 +20,10 @@ with your own model. STT (Deepgram) and TTS (MiniMax) stay Agora-managed.
 - [Agora CLI](https://github.com/AgoraIO/cli)
 - [ngrok](https://ngrok.com/) (or any tunnel — the backend must be publicly reachable; Agora cloud calls `/llm` directly)
 
+The same commands work on macOS, Linux, and Windows. On macOS/Linux, setup uses
+`python3`; on Windows, it uses the Python launcher (`py`) or `python`. WSL and
+virtualenv activation are not required.
+
 ## Run It
 
 ```bash
